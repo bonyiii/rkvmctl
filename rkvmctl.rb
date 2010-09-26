@@ -31,15 +31,15 @@ class RKvmctl
     #should be changed by params
     @verbose=true
     @defaults={
-      "sleeptime"=>3,
+      "sleeptime" => 3,
       # How long to sleep at certain points in the script
-      "sleeptries"=>10,
+      "sleeptries" => 10,
       # How many times wait sleeptime for shutdown
-      "monitor_port"=>4000,
+      "monitor_port" => 4000,
       #Makes shutdown avaiable
-      "monitor_redirect"=>true,
+      "monitor_redirect" => true,
       #Display type for VGA output
-      "display"=>"vnc"
+      "display" => "vnc"
       
     }
     uid_check
@@ -81,11 +81,11 @@ class RKvmctl
       usb="-usb "
       usbdevice="-usbdevice "+@conf["mouse"]
     end
-    pidfile="-pidfile #{get_pidfile(filename)}"
-    mem="-m "+@conf["mem"] if @conf.include?("mem")
-    noacpi="-no-acpi" if @conf.include?("noacpi") && @conf["noacpi"]==1
-    nographic="-nographic" if @conf.include?("graphic") && @conf["graphic"]==0
-    monitor="-monitor telnet:127.0.0.1:#{@conf["monitor_port"]},server,nowait" if @conf["monitor_redirect"]!="false" && @conf.include?("monitor_port")
+    pidfile = "-pidfile #{get_pidfile(filename)}"
+    mem = "-m " + @conf["mem"] if @conf.include?("mem")
+    noacpi = "-no-acpi" if @conf.include?("noacpi") && @conf["noacpi"] =~ /no/i
+    nographic = "-nographic" if @conf.include?("graphic") && @conf["graphic"] =~ /no/i
+    monitor = "-monitor telnet:127.0.0.1:#{@conf["monitor_port"]},server,nowait" if @conf["monitor_redirect"]!="false" && @conf.include?("monitor_port")
     #puts vnc_port
     #exit
     
@@ -267,7 +267,7 @@ end_of_help
   
   #Starts the bridge, setup eth0, connect eth0 to bridge, get ip for br0
   def bridge_start
-    if env_check("#{@brctl} show","#{BRIDGE_NAME}.*")==false
+    if env_check("#{@brctl} show","#{BRIDGE_NAME}.*") == false
       `#{@brctl} addbr #{BRIDGE_NAME}`
       `#{@ifconfig} eth0 0.0.0.0 promisc up`
       sleep 0.5
