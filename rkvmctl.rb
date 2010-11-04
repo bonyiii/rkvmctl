@@ -2,11 +2,12 @@
 require 'net/telnet'
 
 #We start debbuger with these options
-#require 'rubygems'
-#require 'ruby-debug'
+require 'rubygems'
+require 'ruby-debug'
 #Debugger.start
 
 class RKvmctl
+  # Change these according your distro
   BRCTL='/sbin/brctl'
   SUDO='/usr/bin/sudo'
   QEMU='/usr/bin/qemu-kvm'
@@ -27,6 +28,7 @@ class RKvmctl
   VNCVIEWER='/usr/bin/vncviewer'
   CPULIMIT='/usr/bin/cpulimit'
   
+  # Convenient 
   def initialize(params)
     @scriptname=File.basename($0)
     #should be changed by params
@@ -97,6 +99,10 @@ class RKvmctl
     # Was system call successful?
     #http://ruby-doc.org/core/classes/Kernel.html#M005971
     if $?.success?
+      # TODO: check this
+      # Running after hooks (system commands)
+      `#{@conf["after_hooks"]}`
+
       # Sets cpulimit on KVM instance if required by config
       set_cpulimit(filename, @conf["cpulimit"]) if @conf.include?("cpulimit") && @conf["cpulimit"].to_f > 0
     end
@@ -220,7 +226,8 @@ end
 
 def set_cpulimit(filename, limit)
   #env_check('ps -fax', /cpulimit.*\-p\s*#{get_pid(filename)}/)
-  #`#{@cpulimit} -z -p #{get_pid(filename)} -l #{limit.to_f} &`
+  # This way cpulimit is started as a background job
+  #http://whynotwiki.com/Ruby_/_Process_management
   IO.popen("#{@cpulimit} -z -p #{get_pid(filename)} -l #{limit.to_f}")
 end
 
@@ -245,24 +252,25 @@ def get_vnc_port(filename)
 end
 
 def conf_load(filename)
-  @conf={}
+  @conf = {}
   unless !filename.nil? && File.exist?(filename)
     puts "Config file '#{filename}' doesn't exists!" 
     return false
   end
   
   @defaults.each do |key,variable|
-    @conf[key]=variable
+    @conf[key] = variable
   end
   
   File.open(filename).each do |line|
-    if line=~/^\w+/
-      variable=line.split("=")
-      @conf[variable[0]]=variable[1].slice(/[\w\/\.\:-]+/)
+    if line =~ /^\w+/
+      variable = line.split("=")
+      @conf[variable[0]] = variable[1].slice(/[\w\/\.\:\- ]+/)
       #puts variable[0]+" "+variable[1]
     end
   end
-  @conf["monitor_port"]=@defaults["monitor_port"]+@conf["id"].to_i if @conf["monitor_port"].nil?
+  
+  @conf["monitor_port"] = @defaults["monitor_port"] + @conf["id"].to_i if @conf["monitor_port"].nil?
   return true
 end
 
