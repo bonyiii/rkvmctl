@@ -2,12 +2,11 @@
 require 'net/telnet'
 
 #We start debbuger with these options
-require 'rubygems'
-require 'ruby-debug'
+#require 'rubygems'
+#require 'ruby-debug'
 #Debugger.start
 
 class RKvmctl
-  # Change these according your distro
   BRCTL='/sbin/brctl'
   SUDO='/usr/bin/sudo'
   QEMU='/usr/bin/qemu-kvm'
@@ -26,28 +25,26 @@ class RKvmctl
   KERNEL_MODULE_NAME='kvm_amd' #'kvm_intel'
   CAT='/bin/cat'
   VNCVIEWER='/usr/bin/vncviewer'
-  CPULIMIT='/usr/bin/cpulimit'
   
-  # Convenient 
   def initialize(params)
     @scriptname=File.basename($0)
     #should be changed by params
     @verbose=true
     @defaults={
-      "sleeptime" => 3,
+      "sleeptime"=>3,
       # How long to sleep at certain points in the script
-      "sleeptries" => 10,
+      "sleeptries"=>10,
       # How many times wait sleeptime for shutdown
-      "monitor_port" => 4000,
+      "monitor_port"=>4000,
       #Makes shutdown avaiable
-      "monitor_redirect" => true,
+      "monitor_redirect"=>true,
       #Display type for VGA output
-      "display" => "vnc"
+      "display"=>"vnc"
       
     }
     uid_check
   end
-  #NO CHANGE SHOULD BE NECCESSARY BELOW THIS LINE
+#NO CHANGE SHOULD BE NECCESSARY BELOW THIS LINE
   
   def start(filename)
     return false unless conf_load(filename)==true
@@ -84,28 +81,17 @@ class RKvmctl
       usb="-usb "
       usbdevice="-usbdevice "+@conf["mouse"]
     end
-    pidfile = "-pidfile #{get_pidfile(filename)}"
-    mem = "-m " + @conf["mem"] if @conf.include?("mem")
-    noacpi = "-no-acpi" if @conf.include?("noacpi") && @conf["noacpi"] =~ /no/i
-    nographic = "-nographic" if @conf.include?("graphic") && @conf["graphic"] =~ /no/i
-    monitor = "-monitor telnet:127.0.0.1:#{@conf["monitor_port"]},server,nowait" if @conf["monitor_redirect"]!="false" && @conf.include?("monitor_port")
+    pidfile="-pidfile #{get_pidfile(filename)}"
+    mem="-m "+@conf["mem"] if @conf.include?("mem")
+    noacpi="-no-acpi" if @conf.include?("noacpi") && @conf["noacpi"]==1
+    nographic="-nographic" if @conf.include?("graphic") && @conf["graphic"]==0
+    monitor="-monitor telnet:127.0.0.1:#{@conf["monitor_port"]},server,nowait" if @conf["monitor_redirect"]!="false" && @conf.include?("monitor_port")
     #puts vnc_port
     #exit
     
     command="#{@qemu} #{mem} #{hda} #{hdb} #{hdc} #{hdd} #{cdrom} #{boot} #{nic} #{tap} #{cpus} #{vnc_port} #{daemonize} #{keyboard} #{soundhw} #{usb} #{usbdevice} #{pidfile} #{monitor} #{noacpi} #{nographic}"
     puts command if @verbose
-    # Starts KVM
     `#{command}`
-    # Was system call successful?
-    #http://ruby-doc.org/core/classes/Kernel.html#M005971
-    if $?.success?
-      # TODO: check this
-      # Running after hooks (system commands)
-      `#{@conf["after_hooks"]}`
-
-      # Sets cpulimit on KVM instance if required by config
-      set_cpulimit(filename, @conf["cpulimit"]) if @conf.include?("cpulimit") && @conf["cpulimit"].to_f > 0
-    end
   end
   
   def stop(filename)
@@ -187,19 +173,19 @@ class RKvmctl
     if vm_name==nil
       puts "Currently running virtual machines:\n"
       #puts `#{PGREP} -lf kvm | #{GREP} -v #{@scriptname} | #{AWK} '\{ print $4 \}'`
-      `#{PGREP} -lf kvm | #{GREP} -v #{@scriptname}`.each do 
-      |line| print line.slice(/^\d+/)+" "
-      puts line.slice(/(\w+-\w+)(\.pid)/,1)
+	`#{PGREP} -lf kvm | #{GREP} -v #{@scriptname}`.each do 
+		|line| print line.slice(/^\d+/)+" "
+		puts line.slice(/(\w+-\w+)(\.pid)/,1)
+	end
+    elsif vm_name=="kvm"
+      puts `#{PGREP} -lf kvm | #{GREP} -v #{@scriptname}`
     end
-  elsif vm_name=="kvm"
-    puts `#{PGREP} -lf kvm | #{GREP} -v #{@scriptname}`
   end
-end
-
-def help
-  #quick ruby reference http://www.zenspider.com/Languages/Ruby/QuickRef.html
-  scriptversion=1.0
-  help_text=<<end_of_help
+  
+  def help
+    #quick ruby reference http://www.zenspider.com/Languages/Ruby/QuickRef.html
+    scriptversion=1.0
+    help_text=<<end_of_help
         #{@scriptname} #{scriptversion}
         Licensed under BSDL  Copyright:      2008
         #{@scriptname} is a management and control script for KVM-based virtual machines.
@@ -207,7 +193,6 @@ def help
                 #{@scriptname} --stop             host - stop  the named VM (only use if the guest is hung)
                 #{@scriptname} --shutdown         host - stop  the named VM gracefully (only works if acpid is running in vm)
                 #{@scriptname} --vnc              host - connect vncviewer to named vm
-                #{@scriptname} --cpulimit         host percentage - set cpulimit on given vm, Example: #{@scriptname} --cpulimit /etc/kvm/vm/example.conf 10
                 #{@scriptname} --restart          host - start the named VM, and then connect to console via VNC
                 #{@scriptname} --bridge-stop         - stop bridged networking and set it back as it was
                 #{@scriptname} --kernel-module-stop  - unload kvm kernel module
@@ -216,132 +201,121 @@ def help
                 #{@scriptname} --help                - show this usage blurb
         ** Using stop is the same as pulling the power cord on a physical system. Use with caution.
 end_of_help
-  puts help_text
-end
-
-def usage
-  puts "\nType #{@scriptname} --help to see available commands!\n\n"
-  return false
-end
-
-def set_cpulimit(filename, limit)
-  #env_check('ps -fax', /cpulimit.*\-p\s*#{get_pid(filename)}/)
-  # This way cpulimit is started as a background job
-  #http://whynotwiki.com/Ruby_/_Process_management
-  IO.popen("#{@cpulimit} -z -p #{get_pid(filename)} -l #{limit.to_f}")
-end
-
-private
-
-def get_pid(filename)
-  if File.exist?(get_pidfile(filename))
-    pid=%x{#{@cat} #{get_pidfile(filename)}}.slice(/\d+/)  
-  else
-    pid=`#{PGREP} -lf #{get_pidfile(filename)} | #{GREP} -v #{@scriptname} | #{AWK} '\{ print $1\}'`.slice(/\d+/)
+    puts help_text
   end
-end
-
-#Returns the pidfile to identify the process, the pidfile always present in pgrep since this program always sets a pidfile
-def get_pidfile(filename)
-    "#{PIDDIR}/#{File.basename(filename)}.pid"
-end
-
-#
-def get_vnc_port(filename)
-  `#{PGREP} -lf #{get_pidfile(filename)} | #{GREP} -v #{@scriptname}`.slice(/(-vnc) :(\d+)/,2)
-end
-
-def conf_load(filename)
-  @conf = {}
-  unless !filename.nil? && File.exist?(filename)
-    puts "Config file '#{filename}' doesn't exists!" 
+  
+  def usage
+    puts "\nType #{@scriptname} --help to see available commands!\n\n"
     return false
   end
   
-  @defaults.each do |key,variable|
-    @conf[key] = variable
-  end
+  private
   
-  File.open(filename).each do |line|
-    if line =~ /^\w+/
-      variable = line.split("=")
-      @conf[variable[0]] = variable[1].slice(/[\w\/\.\:\- ]+/)
-      #puts variable[0]+" "+variable[1]
+  def get_pid(filename)
+    if File.exist?(get_pidfile(filename))
+      pid=%x{#{@cat} #{get_pidfile(filename)}}.slice(/\d+/)  
+    else
+      pid=`#{PGREP} -lf #{get_pidfile(filename)} | #{GREP} -v #{@scriptname} | #{AWK} '\{ print $1\}'`.slice(/\d+/)
     end
   end
   
-  @conf["monitor_port"] = @defaults["monitor_port"] + @conf["id"].to_i if @conf["monitor_port"].nil?
-  return true
-end
-
-def uid_check
-  sudo= Process.uid==0 ? "" : SUDO+" "
-  RKvmctl.constants.each do |constant|
-    instance_variable_set("@#{constant}".downcase,sudo+RKvmctl.const_get(constant)) unless constant=="SUDO"
+  #Returns the pidfile to identify the process, the pidfile always present in pgrep since this program always sets a pidfile
+  def get_pidfile(filename)
+    "#{PIDDIR}/#{File.basename(filename)}.pid"
   end
-end
+  
+  #
+  def get_vnc_port(filename)
+    `#{PGREP} -lf #{get_pidfile(filename)} | #{GREP} -v #{@scriptname}`.slice(/(-vnc) :(\d+)/,2)
+  end
+  
+  def conf_load(filename)
+    @conf={}
+    unless !filename.nil? && File.exist?(filename)
+      puts "Config file '#{filename}' doesn't exists!" 
+      return false
+    end
 
-def env_check(command, regexp)
+    @defaults.each do |key,variable|
+      @conf[key]=variable
+    end
+
+    File.open(filename).each do |line|
+      if line=~/^\w+/
+        variable=line.split("=")
+        @conf[variable[0]]=variable[1].slice(/[\w\/\.\:-]+/)
+        #puts variable[0]+" "+variable[1]
+      end
+    end
+    @conf["monitor_port"]=@defaults["monitor_port"]+@conf["id"].to_i if @conf["monitor_port"].nil?
+    return true
+  end
+  
+  def uid_check
+    sudo= Process.uid==0 ? "" : SUDO+" "
+    RKvmctl.constants.each do |constant|
+      instance_variable_set("@#{constant}".downcase,sudo+RKvmctl.const_get(constant)) unless constant=="SUDO"
+    end
+  end
+  
+  def env_check(command, regexp)
     %x{#{command}}.each do |line|
-    return true if line =~ Regexp.new(regexp) 
+      return true if line =~ /#{regexp}/ 
+    end
+    return false
   end
-  return false
-end
-
-#Starts the bridge, setup eth0, connect eth0 to bridge, get ip for br0
-def bridge_start
-  if env_check("#{@brctl} show","#{BRIDGE_NAME}.*") == false
-    `#{@brctl} addbr #{BRIDGE_NAME}`
-    `#{@ifconfig} eth0 0.0.0.0 promisc up`
-    sleep 0.5
-    `#{@brctl} addif #{BRIDGE_NAME} eth0`
-    `#{@dhclient} #{BRIDGE_NAME}`
-    `sudo pkill dhcpcd`
-    #`/sbin/dhcpcd -D -K -N -t 999999 -h bear.home -c /etc/sysconfig/network/scripts/dhcpcd-hook #{BRIDGE_NAME}`
-    puts "Bridge started." if @verbose
-  else
-    puts "Bridge is already running." if @verbose
-  end  
-end
-
-def kernel_module_start
-  if env_check("#{@lsmod}","^#{KERNEL_MODULE_NAME}.*")==false
-    `#{@modprobe} #{KERNEL_MODULE_NAME}`
-    sleep 0.5
-    puts "Kernel module loaded."
-  else
-    puts "Kernel module already loaded."
-  end  
-end
-
+  
+  #Starts the bridge, setup eth0, connect eth0 to bridge, get ip for br0
+  def bridge_start
+    if env_check("#{@brctl} show","#{BRIDGE_NAME}.*")==false
+      `#{@brctl} addbr #{BRIDGE_NAME}`
+      `#{@ifconfig} eth0 0.0.0.0 promisc up`
+      sleep 0.5
+      `#{@brctl} addif #{BRIDGE_NAME} eth0`
+      `#{@dhclient} #{BRIDGE_NAME}`
+      `sudo pkill dhcpcd`
+      #`/sbin/dhcpcd -D -K -N -t 999999 -h bear.home -c /etc/sysconfig/network/scripts/dhcpcd-hook #{BRIDGE_NAME}`
+      puts "Bridge started." if @verbose
+    else
+      puts "Bridge is already running." if @verbose
+    end  
+  end
+  
+  def kernel_module_start
+    if env_check("#{@lsmod}","^#{KERNEL_MODULE_NAME}.*")==false
+      `#{@modprobe} #{KERNEL_MODULE_NAME}`
+      sleep 0.5
+      puts "Kernel module loaded."
+    else
+      puts "Kernel module already loaded."
+    end  
+  end
 end
 
 
 #Program starts...
 if defined?(ARGV)
-vm=RKvmctl.new("")
-case (ARGV[0])
-  when '--start'
-  vm.start(ARGV[1])
-  when '--restart'
-  vm.restart(ARGV[1])
-  when '--stop'
-  vm.stop(ARGV[1])
-  when '--shutdown'
-  vm.shutdown(ARGV[1])
-  when '--status'
-  vm.status(ARGV[1])
-  when '--bridge-stop'
-  vm.bridge_stop
-  when '--vnc'
-  vm.vnc(ARGV[1])
-  when '--cpulimit'
-  vm.set_cpulimit(ARGV[1], ARGV[2])
-  when '--kernel-module-stop'
-  vm.kernel_module_stop
-  when '--help'
-  vm.help
-else
-  vm.help
-end  
+  vm=RKvmctl.new("")
+  case (ARGV[0])
+    when '--start'
+    vm.start(ARGV[1])
+    when '--restart'
+    vm.restart(ARGV[1])
+    when '--stop'
+    vm.stop(ARGV[1])
+    when '--shutdown'
+    vm.shutdown(ARGV[1])
+    when '--status'
+    vm.status(ARGV[1])
+    when '--bridge-stop'
+    vm.bridge_stop
+    when '--vnc'
+    vm.vnc(ARGV[1])
+    when '--kernel-module-stop'
+    vm.kernel_module_stop
+    when '--help'
+    vm.help
+  else
+    vm.help
+  end  
 end
